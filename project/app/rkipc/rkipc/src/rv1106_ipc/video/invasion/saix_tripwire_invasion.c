@@ -187,3 +187,11 @@ void load_all_configs() {
         }
     }
 }
+
+void init_tripwire_and_area_configs() {
+    LOG_INFO("Initializing Tripwire and Area Configurations...\n");
+    load_all_configs(); // Load all tripwire and area invasion configurations
+    normalize_rules();  // Normalize the loaded configurations
+    LOG_INFO("Initialization Complete.\n");
+}
+
