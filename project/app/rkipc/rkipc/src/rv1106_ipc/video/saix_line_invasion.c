@@ -33,6 +33,12 @@ typedef struct {
     RockIvaArea areas[ROCKIVA_AREA_NUM_MAX];
 } RockIvaAreas;
 
+/* Line Invasion Rule */
+typedef struct {
+    RockIvaLine line;  // Line coordinates
+    bool ruleEnable;   // Enable/Disable flag for the rule
+} LineInvasionRule;
+
 /* Area Invasion Rule */
 typedef struct {
     RockIvaArea area;  // Area coordinates
@@ -41,8 +47,8 @@ typedef struct {
 
 /* Task Rule */
 typedef struct {
-    LineInvasionAreaRule lineInvasionRule[MAX_LINE_INVASION_RULES];
-    LineInvasionAreaRule tripWireRule[ROCKIVA_BA_MAX_RULE_NUM];
+    LineInvasionRule lineInvasionRule[MAX_LINE_INVASION_RULES];
+    LineInvasionRule tripWireRule[ROCKIVA_BA_MAX_RULE_NUM];
     AreaInvasionRule areaInRule[ROCKIVA_BA_MAX_RULE_NUM];
     AreaInvasionRule areaOutRule[ROCKIVA_BA_MAX_RULE_NUM];
     AreaInvasionRule areaInBreakRule[ROCKIVA_BA_MAX_RULE_NUM];
@@ -63,6 +69,10 @@ void clear_all_line_invasion_rules();
 void normalize_point(RockIvaPoint* point) {
     if (!point) return;
     // Normalize the point (logic to be implemented)
+    if (point->x < 0) point->x = 0;
+    if (point->x > 9999) point->x = 9999;
+    if (point->y < 0) point->y = 0;
+    if (point->y > 9999) point->y = 9999;
 }
 
 void normalize_line(RockIvaLine* line) {
@@ -79,7 +89,7 @@ void normalize_area(RockIvaArea* area) {
 }
 
 void set_line_invasion_rule(int index, RockIvaLine* line, bool enable) {
-    if (index < 0 || index >= MAX_LINE_INVASION_RULES) return;
+    if (index < 0 || index >= MAX_LINE_INVASION_RULES || !line) return;
     g_task_rule.lineInvasionRule[index].line = *line;
     g_task_rule.lineInvasionRule[index].ruleEnable = enable;
 }
@@ -113,3 +123,4 @@ void normalize_rules() {
         }
     }
 }
+
