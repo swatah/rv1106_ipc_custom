@@ -127,6 +127,16 @@
   */
  void init_tripwire_and_area_configs();
  
+ /**
+  * @brief Initialize tripwire functionality
+  */
+ void init_tripwire();
+
+ /**
+  * @brief Deinitialize tripwire functionality
+  */
+    void deinit_tripwire();
+ 
  /* Note: The following function is not defined in the provided source but is referenced */
  /**
   * @brief Get an integer parameter from the system configuration

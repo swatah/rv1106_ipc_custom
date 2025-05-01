@@ -61,6 +61,7 @@ void normalize_rules();
 bool read_line_config(int index, RockIvaLine* line);
 bool read_area_config(int index, RockIvaArea* area);
 void load_all_configs();
+void init_tripwire();
 
 // Function definitions
 
@@ -219,4 +220,26 @@ LOG_INFO("Initializing Tripwire and Area Configurations...\n");
 load_all_configs(); // Load all tripwire and area invasion configurations
 normalize_rules();  // Normalize the loaded configurations
 LOG_INFO("Initialization Complete.\n");
+}
+
+void init_tripwire() {
+    LOG_INFO("Initializing Tripwire functionality...");
+
+    // Load all tripwire and area invasion configurations
+    load_all_configs();
+
+    // Normalize the loaded configurations
+    normalize_rules();
+
+    LOG_INFO("Tripwire initialization complete.");
+}
+
+//deinit tripwire
+void deinit_tripwire() {
+    LOG_INFO("Deinitializing Tripwire functionality...");
+
+    // Clear all tripwire and area invasion rules
+    clear_all_rules();
+
+    LOG_INFO("Tripwire deinitialization complete.");
 }

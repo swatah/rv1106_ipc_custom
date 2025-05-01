@@ -1723,6 +1723,9 @@ int rk_video_init() {
 	if (enable_osd)
 		ret |= rkipc_osd_init();
 	LOG_DEBUG("over\n");
+	//for tripwire
+	if (enable_tripwire)
+		ret |= saix_tripwire_init();
 
 	return ret;
 }
@@ -1731,6 +1734,9 @@ int rk_video_deinit() {
 	LOG_DEBUG("%s\n", __func__);
 	g_video_run_ = 0;
 	int ret = 0;
+	// for tripwire
+	if (enable_tripwire)
+		ret |= saix_tripwire_deinit();
 	if (enable_npu || enable_ivs)
 		ret |= saix_teardown_ivs_pipe();
 	// rk_region_clip_set_callback_register(NULL);
@@ -1755,6 +1761,7 @@ int rk_video_deinit() {
 		ret |= saix_ipc_rtmp_deinit();
 	if (enable_rtsp)
 		ret |= rkipc_rtsp_deinit();
+	
 
 	return ret;
 }
