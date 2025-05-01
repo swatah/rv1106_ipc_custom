@@ -188,10 +188,35 @@ void load_all_configs() {
     }
 }
 
-void init_tripwire_and_area_configs() {
-    LOG_INFO("Initializing Tripwire and Area Configurations...\n");
-    load_all_configs(); // Load all tripwire and area invasion configurations
-    normalize_rules();  // Normalize the loaded configurations
-    LOG_INFO("Initialization Complete.\n");
+// Function to initialize with provided configurations
+void init_tripwire_and_area_configs_with_params(TripwireRule* tripwires, int tripwire_count, 
+    AreaInvasionRule* areas, int area_count) {
+LOG_INFO("Initializing Tripwire and Area Configurations with parameters...\n");
+
+// Clear all existing rules
+clear_all_rules();
+
+// Set tripwire rules
+for (int i = 0; i < tripwire_count && i < MAX_TRIPWIRE_RULES; i++) {
+set_tripwire_rule(i, &tripwires[i].line, tripwires[i].ruleEnable);
 }
 
+// Set area invasion rules
+for (int i = 0; i < area_count && i < ROCKIVA_BA_MAX_RULE_NUM; i++) {
+set_area_invasion_rule(i, &areas[i].area, areas[i].ruleEnable);
+}
+
+// Normalize all rules
+normalize_rules();
+
+LOG_INFO("Initialization with parameters complete. Tripwires: %d, Areas: %d\n", 
+tripwire_count, area_count);
+}
+
+// Original initialization function - now calls the parameterized version if no parameters provided
+void init_tripwire_and_area_configs() {
+LOG_INFO("Initializing Tripwire and Area Configurations...\n");
+load_all_configs(); // Load all tripwire and area invasion configurations
+normalize_rules();  // Normalize the loaded configurations
+LOG_INFO("Initialization Complete.\n");
+}
