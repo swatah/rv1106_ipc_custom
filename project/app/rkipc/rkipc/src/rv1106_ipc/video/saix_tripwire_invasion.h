@@ -1,4 +1,15 @@
 /**
+ * Copyright (c) 2025 NeuralSense AI Private Limited
+ * Trading as swatah.ai. All rights reserved.
+ *
+ * This file is part of the swatah.ai software stack and is licensed under
+ * the terms defined in the accompanying LICENSE file. Unauthorized copying,
+ * distribution, or modification of this file, via any medium, is strictly prohibited.
+ *
+ * For more information, visit: https://swatah.ai
+*/
+
+/**
  * @file rockiva_detection.h
  * @brief Header file for tripwire detection module
  * @details Includes definitions for tripwire and area invasion detection
@@ -15,26 +26,20 @@
  #endif
  
  /* Define constants */
- #define ROCKIVA_AREA_NUM_MAX 10
- #define ROCKIVA_BA_MAX_RULE_NUM 10
- #define MAX_TRIPWIRE_RULES 10
+ #ifndef MAX_TRIPWIRE_RULES
+#define MAX_TRIPWIRE_RULES 10
+#endif
  
  /* Point coordinates */
- typedef struct {
-     int16_t x; /* Horizontal coordinate, represented as ten-thousandths, range 0~9999 */
-     int16_t y; /* Vertical coordinate, represented as ten-thousandths, range 0~9999 */
+/* typedef struct {
+     int16_t x; 
+     int16_t y; 
  } RockIvaPoint;
- 
+ */
+
  /* Line coordinates */
- typedef struct {
-     RockIvaPoint head; /* Head coordinate (top of the line in the vertical direction) */
-     RockIvaPoint tail; /* Tail coordinate (bottom of the line in the vertical direction) */
- } RockIvaLine;
- 
- /* Area coordinates */
- typedef struct {
-     RockIvaPoint points[4]; /* Four points defining an area */
- } RockIvaArea;
+
+
  
  /* Tripwire Rule */
  typedef struct {
@@ -130,12 +135,12 @@
  /**
   * @brief Initialize tripwire functionality
   */
- void init_tripwire();
+ int init_tripwire();
 
  /**
   * @brief Deinitialize tripwire functionality
   */
-    void deinit_tripwire();
+    int deinit_tripwire();
  
  /* Note: The following function is not defined in the provided source but is referenced */
  /**

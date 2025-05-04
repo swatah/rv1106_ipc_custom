@@ -15,6 +15,7 @@
 #include "rockiva.h"
 #include "saix_threads.h"
 #include "saix_utils.h"
+#include "saix_tripwire_invasion.h"
 
 
 #ifdef LOG_TAG
@@ -33,6 +34,7 @@ static int g_nn_osd_run_ = 0;
 int pipe_id_ = 0;
 static int dev_id_ = 0;
 int cycle_snapshot_flag = 0;
+int enable_tripwire = 0;
 const char *tmp_output_data_type = "H.264";
 const char *tmp_rc_mode;
 const char *tmp_h264_profile;
@@ -1685,6 +1687,7 @@ int rk_video_init() {
 	enable_venc_1 = rk_param_get_int("video.source:enable_venc_1", 1);
 	enable_rtsp = rk_param_get_int("video.source:enable_rtsp", 1);
 	enable_rtmp = rk_param_get_int("video.source:enable_rtmp", 1);
+	enable_tripwire = rk_param_get_int("video.source:enable_tripwire", 0);
 	LOG_INFO("enable_jpeg is %d, enable_venc_0 is %d, enable_venc_1 is %d, enable_rtsp is %d, "
 	         "enable_rtmp is %d\n",
 	         enable_jpeg, enable_venc_0, enable_venc_1, enable_rtsp, enable_rtmp);
@@ -1725,7 +1728,7 @@ int rk_video_init() {
 	LOG_DEBUG("over\n");
 	//for tripwire
 	if (enable_tripwire)
-		ret |= saix_tripwire_init();
+		ret |= init_tripwire();
 
 	return ret;
 }
@@ -1736,7 +1739,7 @@ int rk_video_deinit() {
 	int ret = 0;
 	// for tripwire
 	if (enable_tripwire)
-		ret |= saix_tripwire_deinit();
+		ret |= deinit_tripwire();
 	if (enable_npu || enable_ivs)
 		ret |= saix_teardown_ivs_pipe();
 	// rk_region_clip_set_callback_register(NULL);

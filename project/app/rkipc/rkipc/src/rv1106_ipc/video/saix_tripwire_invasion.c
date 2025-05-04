@@ -1,3 +1,14 @@
+/*
+ * Copyright (c) 2025 NeuralSense AI Private Limited
+ * Trading as swatah.ai. All rights reserved.
+ *
+ * This file is part of the swatah.ai software stack and is licensed under
+ * the terms defined in the accompanying LICENSE file. Unauthorized copying,
+ * distribution, or modification of this file, via any medium, is strictly prohibited.
+ *
+ * For more information, visit: https://swatah.ai
+*/
+
 // Import libraries
 
 #include <stdint.h>
@@ -61,7 +72,7 @@ void normalize_rules();
 bool read_line_config(int index, RockIvaLine* line);
 bool read_area_config(int index, RockIvaArea* area);
 void load_all_configs();
-void init_tripwire();
+int init_tripwire();
 
 // Function definitions
 
@@ -222,8 +233,8 @@ normalize_rules();  // Normalize the loaded configurations
 LOG_INFO("Initialization Complete.\n");
 }
 
-void init_tripwire() {
-    LOG_INFO("Initializing Tripwire functionality...");
+int init_tripwire() {
+    printf("Initializing Tripwire functionality...\n");
 
     // Load all tripwire and area invasion configurations
     load_all_configs();
@@ -231,15 +242,15 @@ void init_tripwire() {
     // Normalize the loaded configurations
     normalize_rules();
 
-    LOG_INFO("Tripwire initialization complete.");
+    printf("Tripwire initialization complete.");
 }
 
 //deinit tripwire
-void deinit_tripwire() {
-    LOG_INFO("Deinitializing Tripwire functionality...");
+int deinit_tripwire() {
+    printf("Deinitializing Tripwire functionality...");
 
     // Clear all tripwire and area invasion rules
     clear_all_rules();
 
-    LOG_INFO("Tripwire deinitialization complete.");
+    printf("Tripwire deinitialization complete.");
 }
