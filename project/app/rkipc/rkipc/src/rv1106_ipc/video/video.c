@@ -54,7 +54,10 @@ typedef enum rkCOLOR_INDEX_E {
 	RGN_COLOR_LUT_INDEX_1 = 1,
 } COLOR_INDEX_E;
 
-
+//tripwire event callback
+void tripwire_event_callback(int ruleId, const char* eventType, const char* details) {
+    LOG_INFO("Event detected: Rule ID = %d, Type = %s, Details = %s\n", ruleId, eventType, details);
+}
 
 
 int saix_vi_dev_init() {
@@ -1697,7 +1700,7 @@ int rk_video_init() {
 	g_vo_dev_id = rk_param_get_int("video.source:vo_dev_id", 3);
 	enable_npu = rk_param_get_int("video.source:enable_npu", 0);
 	enable_osd = rk_param_get_int("osd.common:enable_osd", 0);
-	LOG_DEBUG("g_vi_chn_id is %d, g_enable_vo is %d, g_vo_dev_id is %d, enable_npu is %d, "
+	LOG_DEBUG("g_vi_chn_id is %d, g_enable_vo is %d, g_vco_dev_id is %d, enable_npu is %d, "
 	          "enable_osd is %d\n",
 	          g_vi_chn_id, g_enable_vo, g_vo_dev_id, enable_npu, enable_osd);
 	g_video_run_ = 1;
@@ -1727,8 +1730,17 @@ int rk_video_init() {
 		ret |= rkipc_osd_init();
 	LOG_DEBUG("over\n");
 	//for tripwire
-	if (enable_tripwire)
+	if (enable_tripwire){
+		// Register the callback
+		register_event_callback(tripwire_event_callback);
+
 		ret |= init_tripwire();
+
+		//Start event processing in a separate thread
+        pthread_t event_thread;
+        pthread_create(&event_thread, NULL, (void* (*)(void*))process_events, NULL);
+        pthread_detach(event_thread); // Detach the thread to avoid join
+	}
 
 	return ret;
 }

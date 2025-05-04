@@ -58,6 +58,11 @@ typedef struct {
     AreaInvasionRule areaInvasionRules[ROCKIVA_BA_MAX_RULE_NUM];
 } TaskRule;
 
+typedef void (*EventCallback)(int ruleId, const char* eventType, const char* details);
+
+// Register the callback
+void register_event_callback(EventCallback callback);
+
 // Global task rule
 TaskRule g_task_rule;
 
@@ -73,6 +78,15 @@ bool read_line_config(int index, RockIvaLine* line);
 bool read_area_config(int index, RockIvaArea* area);
 void load_all_configs();
 int init_tripwire();
+
+// Event handling
+
+static EventCallback g_event_callback = NULL;
+
+// Function to register the callback
+void register_event_callback(EventCallback callback) {
+    g_event_callback = callback;
+}
 
 // Function definitions
 
@@ -232,6 +246,64 @@ load_all_configs(); // Load all tripwire and area invasion configurations
 normalize_rules();  // Normalize the loaded configurations
 LOG_INFO("Initialization Complete.\n");
 }
+
+// Function to detect tripwire events
+void detect_tripwire_events() {
+    for (int i = 0; i < MAX_TRIPWIRE_RULES; i++) {
+        if (g_task_rule.tripwireRules[i].ruleEnable) {
+            // Simulate event detection (replace with actual detection logic)
+            bool eventTriggered = (rand() % 10 == 0); // Randomly trigger events for testing
+            if (eventTriggered && g_event_callback) {
+                char details[128];
+                snprintf(details, sizeof(details), "Tripwire %d triggered at coordinates: Head(%d, %d), Tail(%d, %d)",
+                         i,
+                         g_task_rule.tripwireRules[i].line.head.x,
+                         g_task_rule.tripwireRules[i].line.head.y,
+                         g_task_rule.tripwireRules[i].line.tail.x,
+                         g_task_rule.tripwireRules[i].line.tail.y);
+                g_event_callback(i, "Tripwire", details);
+            }
+        }
+    }
+}
+
+// Function to detect area invasion events
+void detect_area_invasion_events() {
+    for (int i = 0; i < ROCKIVA_BA_MAX_RULE_NUM; i++) {
+        if (g_task_rule.areaInvasionRules[i].ruleEnable) {
+            // Simulate event detection (replace with actual detection logic)
+            bool eventTriggered = (rand() % 15 == 0); // Randomly trigger events for testing
+            if (eventTriggered && g_event_callback) {
+                char details[128];
+                snprintf(details, sizeof(details), "Area Invasion %d triggered at points: (%d, %d), (%d, %d), (%d, %d), (%d, %d)",
+                         i,
+                         g_task_rule.areaInvasionRules[i].area.points[0].x,
+                         g_task_rule.areaInvasionRules[i].area.points[0].y,
+                         g_task_rule.areaInvasionRules[i].area.points[1].x,
+                         g_task_rule.areaInvasionRules[i].area.points[1].y,
+                         g_task_rule.areaInvasionRules[i].area.points[2].x,
+                         g_task_rule.areaInvasionRules[i].area.points[2].y,
+                         g_task_rule.areaInvasionRules[i].area.points[3].x,
+                         g_task_rule.areaInvasionRules[i].area.points[3].y);
+                g_event_callback(i, "Area Invasion", details);
+            }
+        }
+    }
+}
+
+void process_events() {
+    while (true) {
+        // Detect tripwire events
+        detect_tripwire_events();
+
+        // Detect area invasion events
+        detect_area_invasion_events();
+
+        // Sleep for a short duration to simulate periodic processing
+        usleep(100 * 1000); // 100 ms
+    }
+}
+
 
 int init_tripwire() {
     printf("Initializing Tripwire functionality...\n");

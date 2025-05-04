@@ -37,8 +37,13 @@
  } RockIvaPoint;
  */
 
- /* Line coordinates */
-
+/**
+ * @brief Type definition for the event callback function
+ * @param ruleId The ID of the triggered rule
+ * @param eventType The type of the event (e.g., "Tripwire", "Area Invasion")
+ * @param details Additional details about the event
+ */
+typedef void (*EventCallback)(int ruleId, const char* eventType, const char* details);
 
  
  /* Tripwire Rule */
@@ -131,6 +136,27 @@
   * @brief Initialize tripwire and area invasion configurations
   */
  void init_tripwire_and_area_configs();
+
+ /**
+ * @brief Register a callback function for event handling
+ * @param callback The callback function to register
+ */
+void register_event_callback(EventCallback callback);
+
+/**
+ * @brief Detect tripwire events and invoke the callback if triggered
+ */
+void detect_tripwire_events();
+
+/**
+ * @brief Detect area invasion events and invoke the callback if triggered
+ */
+void detect_area_invasion_events();
+
+/**
+ * @brief Process events periodically (tripwire and area invasion)
+ */
+void process_events();
  
  /**
   * @brief Initialize tripwire functionality
