@@ -176,6 +176,10 @@ void process_events();
   * @return Parameter value or default value
   */
  int rk_param_get_int(const char* entry, int default_value);
+
+void update_tracked_object(const char* id, float cx, float cy);
+void detect_tripwire_events();
+void detect_area_invasion_events();
  
  #ifdef __cplusplus
  }

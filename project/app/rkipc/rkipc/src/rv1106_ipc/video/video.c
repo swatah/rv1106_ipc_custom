@@ -291,6 +291,7 @@ static void *rkipc_get_nn_update_osd(void *arg) {
 						object->objInfo.frameId, object->objInfo.score, object->objInfo.type);
 			x = video_width * object->objInfo.rect.topLeft.x / 10000;
 			y = video_height * object->objInfo.rect.topLeft.y / 10000;
+
 			w = video_width *
 			    (object->objInfo.rect.bottomRight.x - object->objInfo.rect.topLeft.x) / 10000;
 			h = video_height *
@@ -300,6 +301,16 @@ static void *rkipc_get_nn_update_osd(void *arg) {
 			w = (w + 3) / 16 * 16;
 			h = (h + 3) / 16 * 16;
 
+			 // Get bounding box center
+			 float cx = (object->objInfo.rect.topLeft.x + object->objInfo.rect.bottomRight.x) / 2.0f;
+			 float cy = (object->objInfo.rect.topLeft.y + object->objInfo.rect.bottomRight.y) / 2.0f;
+			   // Format a tracking ID string (RockIVA gives integer objId per track)
+			   char tid[32];
+			   snprintf(tid, sizeof(tid), "TID_%05d", object->objInfo.objId);
+		   
+			   // 🔧 Track this object
+			   update_tracked_object(tid, cx, cy);
+			
 			while (x + w + line_pixel >= video_width) {
 				w -= 8;
 			}
@@ -327,6 +338,8 @@ static void *rkipc_get_nn_update_osd(void *arg) {
 				               stCanvasInfo.u32VirHeight, x, y, w, h, line_pixel,
 				               RGN_COLOR_LUT_INDEX_1);
 			}
+			detect_tripwire_events();
+            detect_area_invasion_events();
 			
 			LOG_INFO("draw rect time-consuming is %lld\n",(rkipc_get_curren_time_ms() -
 			 	last_ba_result_time));
