@@ -294,7 +294,25 @@ void update_tracked_object(const char* id, float cx, float cy) {
     }
 }
 
+void fetch_camera_and_client_id(char* camera_id, size_t camera_id_size, char* client_id, size_t client_id_size) {
+    // Fetch camera_id from [osd.0]
+    const char* camera_id_value = rk_param_get_string("osd.0:display_text", "Unknown_Camera");
+    strncpy(camera_id, camera_id_value, camera_id_size - 1);
+    camera_id[camera_id_size - 1] = '\0'; // Ensure null-termination
+
+    // Fetch client_id from [osd.2]
+    const char* client_id_value = rk_param_get_string("osd.2:display_text", "Unknown_Client");
+    strncpy(client_id, client_id_value, client_id_size - 1);
+    client_id[client_id_size - 1] = '\0'; // Ensure null-termination
+}
+
 void detect_tripwire_events() {
+    char camera_id[128];
+    char client_id[128];
+
+    // Fetch camera_id and client_id
+    fetch_camera_and_client_id(camera_id, sizeof(camera_id), client_id, sizeof(client_id));
+
     for (int i = 0; i < MAX_TRIPWIRE_RULES; i++) {
         if (!g_task_rule.tripwireRules[i].ruleEnable)
             continue;
@@ -314,8 +332,8 @@ void detect_tripwire_events() {
                 snprintf(json_message, sizeof(json_message),
                          "{\n"
                          "  \"timestamp\": \"%s\",\n"
-                         "  \"camera_id\": \"CAMERA_001\",\n"
-                         "  \"client_id\": \"CLIENT_ABC\",\n"
+                         "  \"camera_id\": \"%s\",\n"
+                         "  \"client_id\": \"%s\",\n"
                          "  \"event_type\": \"tripwire_event\",\n"
                          "  \"sequence_number\": %d,\n"
                          "  \"tripwire_event\": {\n"
@@ -333,6 +351,8 @@ void detect_tripwire_events() {
                          "  }\n"
                          "}\n",
                          saix_get_current_timestamp(),
+                         camera_id,
+                         client_id,
                          i,
                          direction,
                          obj.tracking_id,
