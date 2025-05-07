@@ -54,9 +54,19 @@ typedef enum rkCOLOR_INDEX_E {
 	RGN_COLOR_LUT_INDEX_1 = 1,
 } COLOR_INDEX_E;
 
+#define TRIPWIRE_DISPLAY_DURATION_MS 1000 // Display triggered tripwire for 1 second
+static struct {
+    bool triggered;
+    long long timestamp_ms;
+} triggered_tripwires[MAX_TRIPWIRE_RULES];
+
 //tripwire event callback
-void tripwire_event_callback(int ruleId, const char* eventType, const char* details) {
+void tripwire_event_callback(int ruleId, const char *eventType, const char *details) {
     LOG_INFO("Event detected: Rule ID = %d, Type = %s, Details = %s\n", ruleId, eventType, details);
+    if (ruleId >= 0 && ruleId < MAX_TRIPWIRE_RULES && strcmp(eventType, "Tripwire") == 0) {
+        triggered_tripwires[ruleId].triggered = true;
+        triggered_tripwires[ruleId].timestamp_ms = rkipc_get_curren_time_ms();
+    }
 }
 
 
@@ -186,178 +196,240 @@ static RK_U8 rgn_color_lut_0_left_value[4] = {0x03, 0xf, 0x3f, 0xff};
 static RK_U8 rgn_color_lut_0_right_value[4] = {0xc0, 0xf0, 0xfc, 0xff};
 static RK_U8 rgn_color_lut_1_left_value[4] = {0x02, 0xa, 0x2a, 0xaa};
 static RK_U8 rgn_color_lut_1_right_value[4] = {0x80, 0xa0, 0xa8, 0xaa};
-RK_S32 draw_rect_2bpp(RK_U8 *buffer, RK_U32 width, RK_U32 height, int rgn_x, int rgn_y, int rgn_w,
-                      int rgn_h, int line_pixel, COLOR_INDEX_E color_index) {
-	int i;
-	RK_U8 *ptr = buffer;
-	RK_U8 value = 0;
-	if (color_index == RGN_COLOR_LUT_INDEX_0)
-		value = 0xff;
-	if (color_index == RGN_COLOR_LUT_INDEX_1)
-		value = 0xaa;
 
-	if (line_pixel > 4) {
-		printf("line_pixel > 4, not support\n", line_pixel);
-		return -1;
-	}
+// New function: Draw a line in 2BPP format
+static RK_S32 draw_line_2bpp(RK_U8 *buffer, RK_U32 width, RK_U32 height, int x0, int y0, int x1, int y1, COLOR_INDEX_E color_index) {
+    int dx = abs(x1 - x0), sx = x0 < x1 ? 1 : -1;
+    int dy = -abs(y1 - y0), sy = y0 < y1 ? 1 : -1;
+    int err = dx + dy, e2;
+    RK_U8 value = (color_index == RGN_COLOR_LUT_INDEX_0) ? 0xff : 0xaa;
 
-	// printf("YUV %dx%d, rgn (%d,%d,%d,%d), line pixel %d\n", width, height, rgn_x, rgn_y, rgn_w,
-	// rgn_h, line_pixel); draw top line
-	ptr += (width * rgn_y + rgn_x) >> 2;
-	for (i = 0; i < line_pixel; i++) {
-		memset(ptr, value, (rgn_w + 3) >> 2);
-		ptr += width >> 2;
-	}
-	// draw letft/right line
-	for (i = 0; i < (rgn_h - line_pixel * 2); i++) {
-		if (color_index == RGN_COLOR_LUT_INDEX_1) {
-			*ptr = rgn_color_lut_1_left_value[line_pixel - 1];
-			*(ptr + ((rgn_w + 3) >> 2)) = rgn_color_lut_1_right_value[line_pixel - 1];
-		} else {
-			*ptr = rgn_color_lut_0_left_value[line_pixel - 1];
-			*(ptr + ((rgn_w + 3) >> 2)) = rgn_color_lut_0_right_value[line_pixel - 1];
-		}
-		ptr += width >> 2;
-	}
-	// draw bottom line
-	for (i = 0; i < line_pixel; i++) {
-		memset(ptr, value, (rgn_w + 3) >> 2);
-		ptr += width >> 2;
-	}
-	return 0;
+    while (true) {
+        if (x0 >= 0 && x0 < width && y0 >= 0 && y0 < height) {
+            RK_U8 *ptr = buffer + ((width * y0 + x0) >> 2);
+            *ptr = value;
+        }
+        if (x0 == x1 && y0 == y1) break;
+        e2 = 2 * err;
+        if (e2 >= dy) { err += dy; x0 += sx; }
+        if (e2 <= dx) { err += dx; y0 += sy; }
+    }
+    return 0;
 }
 
+RK_S32 draw_rect_2bpp(RK_U8 *buffer, RK_U32 width, RK_U32 height, int rgn_x, int rgn_y, int rgn_w,
+	int rgn_h, int line_pixel, COLOR_INDEX_E color_index) {
+if (!buffer || line_pixel <= 0 || line_pixel > 4) {
+LOG_ERROR("Invalid parameters: buffer=%p, line_pixel=%d\n", buffer, line_pixel);
+return -1;
+}
+
+// Ensure coordinates and dimensions are within bounds
+if (rgn_x < 0 || rgn_y < 0 || rgn_w <= 0 || rgn_h <= 0 ||
+rgn_x + rgn_w > width || rgn_y + rgn_h > height) {
+LOG_ERROR("Rectangle out of bounds: (%d,%d,%d,%d) in %dx%d\n",
+rgn_x, rgn_y, rgn_w, rgn_h, width, height);
+return -1;
+}
+
+RK_U8 value = (color_index == RGN_COLOR_LUT_INDEX_0) ? 0xff : 0xaa;
+RK_U8 *ptr = buffer + ((width * rgn_y + rgn_x) >> 2);
+
+// Draw top line
+for (int i = 0; i < line_pixel; i++) {
+memset(ptr, value, (rgn_w + 3) >> 2);
+ptr += width >> 2;
+}
+
+// Draw left and right lines
+for (int i = 0; i < rgn_h - 2 * line_pixel; i++) {
+if (color_index == RGN_COLOR_LUT_INDEX_0) {
+ptr[0] = rgn_color_lut_0_left_value[line_pixel - 1];
+ptr[(rgn_w + 3) >> 2] = rgn_color_lut_0_right_value[line_pixel - 1];
+} else {
+ptr[0] = rgn_color_lut_1_left_value[line_pixel - 1];
+ptr[(rgn_w + 3) >> 2] = rgn_color_lut_1_right_value[line_pixel - 1];
+}
+ptr += width >> 2;
+}
+
+// Draw bottom line
+for (int i = 0; i < line_pixel; i++) {
+memset(ptr, value, (rgn_w + 3) >> 2);
+ptr += width >> 2;
+}
+
+return 0;
+}
+
+// New function: Draw an area (polygon) in 2BPP format
+static RK_S32 draw_area_2bpp(RK_U8 *buffer, RK_U32 width, RK_U32 height, RockIvaArea *area, COLOR_INDEX_E color_index) {
+    int x[4], y[4];
+    for (int i = 0; i < 4; i++) {
+        x[i] = (area->points[i].x * width) / 10000;
+        y[i] = (area->points[i].y * height) / 10000;
+        x[i] = x[i] / 16 * 16; // Align to 16 for 2BPP
+        y[i] = y[i] / 16 * 16;
+    }
+    for (int i = 0; i < 4; i++) {
+        int next = (i + 1) % 4;
+        draw_line_2bpp(buffer, width, height, x[i], y[i], x[next], y[next], color_index);
+    }
+    return 0;
+}
+
+// Modified rkipc_get_nn_update_osd
 static void *rkipc_get_nn_update_osd(void *arg) {
-	g_nn_osd_run_ = 1;
-	LOG_DEBUG("#Start %s thread, arg:%p\n", __func__, arg);
-	prctl(PR_SET_NAME, "RkipcNpuOsd", 0, 0, 0);
+    g_nn_osd_run_ = 1;
+    LOG_DEBUG("#Start %s thread, arg:%p\n", __func__, arg);
+    prctl(PR_SET_NAME, "RkipcNpuOsd", 0, 0, 0);
 
-	int ret = 0;
-	int line_pixel = 2;
-	int change_to_nothing_flag = 0;
-	int video_width = 0;
-	int video_height = 0;
-	int rotation = 0;
-	long long last_ba_result_time;
-	RockIvaBaResult ba_result;
-	RockIvaBaObjectInfo *object;
-	RGN_HANDLE RgnHandle = DRAW_NN_OSD_ID;
-	RGN_CANVAS_INFO_S stCanvasInfo;
+    int ret = 0;
+    int line_pixel = 2;
+    int video_width = 0;
+    int video_height = 0;
+    int rotation = 0;
+    long long last_ba_result_time;
+    RockIvaBaResult ba_result;
+    RockIvaBaObjectInfo *object;
+    RGN_HANDLE RgnHandle = DRAW_NN_OSD_ID;
+    RGN_CANVAS_INFO_S stCanvasInfo;
 
-	memset(&stCanvasInfo, 0, sizeof(RGN_CANVAS_INFO_S));
-	memset(&ba_result, 0, sizeof(ba_result));
-	while (g_nn_osd_run_) {
-		usleep(40 * 1000);
-		rotation = rk_param_get_int("video.source:rotation", 0);
-		if (rotation == 90 || rotation == 270) {
-			video_width = rk_param_get_int("video.0:height", -1);
-			video_height = rk_param_get_int("video.0:width", -1);
-		} else {
-			video_width = rk_param_get_int("video.0:width", -1);
-			video_height = rk_param_get_int("video.0:height", -1);
-		}
-		ret = rkipc_rknn_object_get(&ba_result);
-		LOG_DEBUG("ret is %d, ba_result.objNum is %d\n", ret, ba_result.objNum);
+    memset(&stCanvasInfo, 0, sizeof(RGN_CANVAS_INFO_S));
+    memset(&ba_result, 0, sizeof(ba_result));
+    while (g_nn_osd_run_) {
+        usleep(40 * 1000); // 25 fps
+        rotation = rk_param_get_int("video.source:rotation", 0);
+        if (rotation == 90 || rotation == 270) {
+            video_width = rk_param_get_int("video.0:height", -1);
+            video_height = rk_param_get_int("video.0:width", -1);
+        } else {
+            video_width = rk_param_get_int("video.0:width", -1);
+            video_height = rk_param_get_int("video.0:height", -1);
+        }
+        ret = rkipc_rknn_object_get(&ba_result);
+        LOG_DEBUG("ret is %d, ba_result.objNum is %d\n", ret, ba_result.objNum);
 
-		if ((ret == -1) && (rkipc_get_curren_time_ms() - last_ba_result_time > 300))
-			ba_result.objNum = 0;
-		if (ret == 0)
-			last_ba_result_time = rkipc_get_curren_time_ms();
+        if ((ret == -1) && (rkipc_get_curren_time_ms() - last_ba_result_time > 300))
+            ba_result.objNum = 0;
+        if (ret == 0)
+            last_ba_result_time = rkipc_get_curren_time_ms();
 
-		ret = RK_MPI_RGN_GetCanvasInfo(RgnHandle, &stCanvasInfo);
-		if (ret != RK_SUCCESS) {
-			RK_LOGE("RK_MPI_RGN_GetCanvasInfo failed with %#x!", ret);
-			continue;
-		}
-		if ((stCanvasInfo.stSize.u32Width != UPALIGNTO16(video_width)) ||
-		    (stCanvasInfo.stSize.u32Height != UPALIGNTO16(video_height))) {
-			LOG_WARN("canvas is %d*%d, not equal %d*%d, maybe in the process of switching,"
-			         "skip this time\n",
-			         stCanvasInfo.stSize.u32Width, stCanvasInfo.stSize.u32Height,
-			         UPALIGNTO16(video_width), UPALIGNTO16(video_height));
-			continue;
-		}
-		memset((void *)stCanvasInfo.u64VirAddr, 0,
-		       stCanvasInfo.u32VirWidth * stCanvasInfo.u32VirHeight >> 2);
-		// draw
-		for (int i = 0; i < ba_result.objNum; i++) {
-			int x, y, w, h;
-			object = &ba_result.triggerObjects[i];
-			LOG_INFO("topLeft:[%d,%d], bottomRight:[%d,%d],"
-						"objId is %d, frameId is %d, score is %d, type is %d\n",
-						object->objInfo.rect.topLeft.x, object->objInfo.rect.topLeft.y,
-						object->objInfo.rect.bottomRight.x,
-						object->objInfo.rect.bottomRight.y, object->objInfo.objId,
-						object->objInfo.frameId, object->objInfo.score, object->objInfo.type);
-			x = video_width * object->objInfo.rect.topLeft.x / 10000;
-			y = video_height * object->objInfo.rect.topLeft.y / 10000;
+        ret = RK_MPI_RGN_GetCanvasInfo(RgnHandle, &stCanvasInfo);
+        if (ret != RK_SUCCESS) {
+            RK_LOGE("RK_MPI_RGN_GetCanvasInfo failed with %#x!", ret);
+            continue;
+        }
+        if ((stCanvasInfo.stSize.u32Width != UPALIGNTO16(video_width)) ||
+            (stCanvasInfo.stSize.u32Height != UPALIGNTO16(video_height))) {
+            LOG_WARN("canvas is %d*%d, not equal %d*%d, maybe in the process of switching,"
+                     "skip this time\n",
+                     stCanvasInfo.stSize.u32Width, stCanvasInfo.stSize.u32Height,
+                     UPALIGNTO16(video_width), UPALIGNTO16(video_height));
+            continue;
+        }
+        memset((void *)stCanvasInfo.u64VirAddr, 0,
+               stCanvasInfo.u32VirWidth * stCanvasInfo.u32VirHeight >> 2);
 
-			w = video_width *
-			    (object->objInfo.rect.bottomRight.x - object->objInfo.rect.topLeft.x) / 10000;
-			h = video_height *
-			    (object->objInfo.rect.bottomRight.y - object->objInfo.rect.topLeft.y) / 10000;
-			x = x / 16 * 16;
-			y = y / 16 * 16;
-			w = (w + 3) / 16 * 16;
-			h = (h + 3) / 16 * 16;
+        // Draw NN bounding boxes
+        for (int i = 0; i < ba_result.objNum; i++) {
+            int x, y, w, h;
+            object = &ba_result.triggerObjects[i];
+            LOG_INFO("topLeft:[%d,%d], bottomRight:[%d,%d],"
+                     "objId is %d, frameId is %d, score is %d, type is %d\n",
+                     object->objInfo.rect.topLeft.x, object->objInfo.rect.topLeft.y,
+                     object->objInfo.rect.bottomRight.x,
+                     object->objInfo.rect.bottomRight.y, object->objInfo.objId,
+                     object->objInfo.frameId, object->objInfo.score, object->objInfo.type);
+            x = video_width * object->objInfo.rect.topLeft.x / 10000;
+            y = video_height * object->objInfo.rect.topLeft.y / 10000;
+            w = video_width *
+                (object->objInfo.rect.bottomRight.x - object->objInfo.rect.topLeft.x) / 10000;
+            h = video_height *
+                (object->objInfo.rect.bottomRight.y - object->objInfo.rect.topLeft.y) / 10000;
+            x = x / 16 * 16;
+            y = y / 16 * 16;
+            w = (w + 3) / 16 * 16;
+            h = (h + 3) / 16 * 16;
 
-			 // Get bounding box center
-			 float cx = (object->objInfo.rect.topLeft.x + object->objInfo.rect.bottomRight.x) / 2.0f;
-			 float cy = (object->objInfo.rect.topLeft.y + object->objInfo.rect.bottomRight.y) / 2.0f;
-			   // Format a tracking ID string (RockIVA gives integer objId per track)
-			   char tid[32];
-			   snprintf(tid, sizeof(tid), "TID_%05d", object->objInfo.objId);
-		   
-			   // 🔧 Track this object
-			   update_tracked_object(tid, cx, cy);
-			
-			while (x + w + line_pixel >= video_width) {
-				w -= 8;
-			}
-			while (y + h + line_pixel >= video_height) {
-				h -= 8;
-			}
-			if (x < 0 || y < 0 || w <= 0 || h <= 0) {
-				continue;
-			}
-			// LOG_DEBUG("i is %d, x,y,w,h is %d,%d,%d,%d\n", i, x, y, w, h);
-			if (object->objInfo.type == ROCKIVA_OBJECT_TYPE_PERSON) {
-				draw_rect_2bpp((RK_U8 *)stCanvasInfo.u64VirAddr, stCanvasInfo.u32VirWidth,
-				               stCanvasInfo.u32VirHeight, x, y, w, h, line_pixel,
-				               RGN_COLOR_LUT_INDEX_0);
-			} else if (object->objInfo.type == ROCKIVA_OBJECT_TYPE_FACE) {
-				draw_rect_2bpp((RK_U8 *)stCanvasInfo.u64VirAddr, stCanvasInfo.u32VirWidth,
-				               stCanvasInfo.u32VirHeight, x, y, w, h, line_pixel,
-				               RGN_COLOR_LUT_INDEX_0);
-			} else if (object->objInfo.type == ROCKIVA_OBJECT_TYPE_VEHICLE) {
-				draw_rect_2bpp((RK_U8 *)stCanvasInfo.u64VirAddr, stCanvasInfo.u32VirWidth,
-				               stCanvasInfo.u32VirHeight, x, y, w, h, line_pixel,
-				               RGN_COLOR_LUT_INDEX_1);
-			} else if (object->objInfo.type == ROCKIVA_OBJECT_TYPE_NON_VEHICLE) {
-				draw_rect_2bpp((RK_U8 *)stCanvasInfo.u64VirAddr, stCanvasInfo.u32VirWidth,
-				               stCanvasInfo.u32VirHeight, x, y, w, h, line_pixel,
-				               RGN_COLOR_LUT_INDEX_1);
-			}
-			detect_tripwire_events();
-            detect_area_invasion_events();
-			
-			LOG_INFO("draw rect time-consuming is %lld\n",(rkipc_get_curren_time_ms() -
-			 	last_ba_result_time));
-#if 0
-			LOG_INFO("triggerRules is %d, ruleID is %d, triggerType is %d\n",
-						object->triggerRules,
-			 			object->firstTrigger.ruleID,
-			 			object->firstTrigger.triggerType);
-#endif
-		}
-		ret = RK_MPI_RGN_UpdateCanvas(RgnHandle);
-		if (ret != RK_SUCCESS) {
-			RK_LOGE("RK_MPI_RGN_UpdateCanvas failed with %#x!", ret);
-			continue;
-		}
-	}
+            // Get bounding box center
+            float cx = (object->objInfo.rect.topLeft.x + object->objInfo.rect.bottomRight.x) / 2.0f;
+            float cy = (object->objInfo.rect.topLeft.y + object->objInfo.rect.bottomRight.y) / 2.0f;
+            char tid[32];
+            snprintf(tid, sizeof(tid), "TID_%05d", object->objInfo.objId);
+            update_tracked_object(tid, cx, cy);
 
-	return 0;
+            while (x + w + line_pixel >= video_width) {
+                w -= 8;
+            }
+            while (y + h + line_pixel >= video_height) {
+                h -= 8;
+            }
+            if (x < 0 || y < 0 || w <= 0 || h <= 0) {
+                continue;
+            }
+            if (object->objInfo.type == ROCKIVA_OBJECT_TYPE_PERSON ||
+                object->objInfo.type == ROCKIVA_OBJECT_TYPE_FACE) {
+                draw_rect_2bpp((RK_U8 *)stCanvasInfo.u64VirAddr, stCanvasInfo.u32VirWidth,
+                               stCanvasInfo.u32VirHeight, x, y, w, h, line_pixel,
+                               RGN_COLOR_LUT_INDEX_0);
+            } else if (object->objInfo.type == ROCKIVA_OBJECT_TYPE_VEHICLE ||
+                       object->objInfo.type == ROCKIVA_OBJECT_TYPE_NON_VEHICLE) {
+                draw_rect_2bpp((RK_U8 *)stCanvasInfo.u64VirAddr, stCanvasInfo.u32VirWidth,
+                               stCanvasInfo.u32VirHeight, x, y, w, h, line_pixel,
+                               RGN_COLOR_LUT_INDEX_1);
+            }
+        }
+
+        // Draw tripwire lines (red: RGN_COLOR_LUT_INDEX_1) only when triggered
+        long long current_time = rkipc_get_curren_time_ms();
+        for (int i = 0; i < MAX_TRIPWIRE_RULES; i++) {
+            if (g_task_rule.tripwireRules[i].ruleEnable &&
+                triggered_tripwires[i].triggered &&
+                (current_time - triggered_tripwires[i].timestamp_ms <= TRIPWIRE_DISPLAY_DURATION_MS)) {
+                RockIvaLine *line = &g_task_rule.tripwireRules[i].line;
+                int x0 = (line->head.x * video_width) / 10000;
+                int y0 = (line->head.y * video_height) / 10000;
+                int x1 = (line->tail.x * video_width) / 10000;
+                int y1 = (line->tail.y * video_height) / 10000;
+                x0 = x0 / 16 * 16;
+                y0 = y0 / 16 * 16;
+                x1 = x1 / 16 * 16;
+                y1 = y1 / 16 * 16;
+                if (x0 >= 0 && x0 < video_width && y0 >= 0 && y0 < video_height &&
+                    x1 >= 0 && x1 < video_width && y1 >= 0 && y1 < video_height) {
+                    draw_line_2bpp((RK_U8 *)stCanvasInfo.u64VirAddr, stCanvasInfo.u32VirWidth,
+                                   stCanvasInfo.u32VirHeight, x0, y0, x1, y1, RGN_COLOR_LUT_INDEX_1);
+                }
+            }
+            // Clear triggered state if duration has expired
+            if (triggered_tripwires[i].triggered &&
+                (current_time - triggered_tripwires[i].timestamp_ms > TRIPWIRE_DISPLAY_DURATION_MS)) {
+                triggered_tripwires[i].triggered = false;
+            }
+        }
+
+        // Draw area invasion regions (blue: RGN_COLOR_LUT_INDEX_0)
+        for (int i = 0; i < ROCKIVA_BA_MAX_RULE_NUM; i++) {
+            if (g_task_rule.areaInvasionRules[i].ruleEnable) {
+                draw_area_2bpp((RK_U8 *)stCanvasInfo.u64VirAddr, stCanvasInfo.u32VirWidth,
+                               stCanvasInfo.u32VirHeight, &g_task_rule.areaInvasionRules[i].area,
+                               RGN_COLOR_LUT_INDEX_0);
+            }
+        }
+
+        // Process tripwire and area invasion events
+        detect_tripwire_events();
+        detect_area_invasion_events();
+
+        ret = RK_MPI_RGN_UpdateCanvas(RgnHandle);
+        if (ret != RK_SUCCESS) {
+            RK_LOGE("RK_MPI_RGN_UpdateCanvas failed with %#x!", ret);
+            continue;
+        }
+    }
+
+    return 0;
 }
 
 int rkipc_osd_draw_nn_init() {
@@ -1713,6 +1785,8 @@ int rk_video_init() {
 	g_vo_dev_id = rk_param_get_int("video.source:vo_dev_id", 3);
 	enable_npu = rk_param_get_int("video.source:enable_npu", 0);
 	enable_osd = rk_param_get_int("osd.common:enable_osd", 0);
+	register_event_callback(tripwire_event_callback);
+    memset(triggered_tripwires, 0, sizeof(triggered_tripwires));
 	LOG_DEBUG("g_vi_chn_id is %d, g_enable_vo is %d, g_vco_dev_id is %d, enable_npu is %d, "
 	          "enable_osd is %d\n",
 	          g_vi_chn_id, g_enable_vo, g_vo_dev_id, enable_npu, enable_osd);
