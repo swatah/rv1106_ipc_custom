@@ -15,6 +15,7 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
+#include <time.h>
 
 // Define constants
 #define ROCKIVA_AREA_NUM_MAX 10
@@ -122,6 +123,14 @@ void set_area_invasion_rule(int index, RockIvaArea* area, bool enable) {
     if (index < 0 || index >= ROCKIVA_BA_MAX_RULE_NUM || !area) return;
     g_task_rule.areaInvasionRules[index].area = *area;
     g_task_rule.areaInvasionRules[index].ruleEnable = enable;
+}
+
+const char* saix_get_current_timestamp() {
+    static char timestamp[64];
+    time_t now = time(NULL);
+    struct tm* tm_info = gmtime(&now); // Use gmtime for UTC or localtime for local time
+    strftime(timestamp, sizeof(timestamp), "%Y-%m-%dT%H:%M:%SZ", tm_info);
+    return timestamp;
 }
 
 void clear_all_rules() {
@@ -248,48 +257,144 @@ LOG_INFO("Initialization Complete.\n");
 }
 
 // Function to detect tripwire events
+#include <string.h>
+
+#define MAX_TRACKED_OBJECTS 128
+
+typedef struct {
+    char tracking_id[32];
+    int active;
+    float prev_cx, prev_cy;
+    float curr_cx, curr_cy;
+} TrackedObject;
+
+TrackedObject tracked_objects[MAX_TRACKED_OBJECTS];
+int tracked_object_count = 0;
+
+void update_tracked_object(const char* id, float cx, float cy) {
+    for (int i = 0; i < tracked_object_count; i++) {
+        if (strcmp(tracked_objects[i].tracking_id, id) == 0) {
+            tracked_objects[i].prev_cx = tracked_objects[i].curr_cx;
+            tracked_objects[i].prev_cy = tracked_objects[i].curr_cy;
+            tracked_objects[i].curr_cx = cx;
+            tracked_objects[i].curr_cy = cy;
+            tracked_objects[i].active = 1;
+            return;
+        }
+    }
+    if (tracked_object_count < MAX_TRACKED_OBJECTS) {
+        TrackedObject* obj = &tracked_objects[tracked_object_count++];
+        strncpy(obj->tracking_id, id, sizeof(obj->tracking_id) - 1);
+        obj->tracking_id[sizeof(obj->tracking_id) - 1] = '\0';
+        obj->prev_cx = cx;
+        obj->prev_cy = cy;
+        obj->curr_cx = cx;
+        obj->curr_cy = cy;
+        obj->active = 1;
+    }
+}
+
 void detect_tripwire_events() {
     for (int i = 0; i < MAX_TRIPWIRE_RULES; i++) {
-        if (g_task_rule.tripwireRules[i].ruleEnable) {
-            // Simulate event detection (replace with actual detection logic)
-            bool eventTriggered = (rand() % 10 == 0); // Randomly trigger events for testing
-            if (eventTriggered && g_event_callback) {
-                char details[128];
-                snprintf(details, sizeof(details), "Tripwire %d triggered at coordinates: Head(%d, %d), Tail(%d, %d)",
+        if (!g_task_rule.tripwireRules[i].ruleEnable)
+            continue;
+
+        RockIvaLine line = g_task_rule.tripwireRules[i].line;
+
+        for (int j = 0; j < tracked_object_count; j++) {
+            TrackedObject obj = tracked_objects[j];
+
+            bool crosses = (obj.prev_cy < line.head.y && obj.curr_cy >= line.head.y) ||
+                           (obj.prev_cy > line.head.y && obj.curr_cy <= line.head.y);
+
+            if (crosses && g_event_callback) {
+                const char* direction = (obj.curr_cy > obj.prev_cy) ? "top_to_bottom" : "bottom_to_top";
+
+                char json_message[512];
+                snprintf(json_message, sizeof(json_message),
+                         "{\n"
+                         "  \"timestamp\": \"%s\",\n"
+                         "  \"camera_id\": \"CAMERA_001\",\n"
+                         "  \"client_id\": \"CLIENT_ABC\",\n"
+                         "  \"event_type\": \"tripwire_event\",\n"
+                         "  \"sequence_number\": %d,\n"
+                         "  \"tripwire_event\": {\n"
+                         "    \"direction\": \"%s\",\n"
+                         "    \"object\": {\n"
+                         "      \"class\": \"object\",\n"
+                         "      \"tracking_id\": \"%s\"\n"
+                         "    },\n"
+                         "    \"counters\": {\n"
+                         "      \"left_to_right\": 0,\n"
+                         "      \"right_to_left\": 0,\n"
+                         "      \"top_to_bottom\": %d,\n"
+                         "      \"bottom_to_top\": %d\n"
+                         "    }\n"
+                         "  }\n"
+                         "}\n",
+                         saix_get_current_timestamp(),
                          i,
-                         g_task_rule.tripwireRules[i].line.head.x,
-                         g_task_rule.tripwireRules[i].line.head.y,
-                         g_task_rule.tripwireRules[i].line.tail.x,
-                         g_task_rule.tripwireRules[i].line.tail.y);
-                g_event_callback(i, "Tripwire", details);
+                         direction,
+                         obj.tracking_id,
+                         (strcmp(direction, "top_to_bottom") == 0) ? 1 : 0,
+                         (strcmp(direction, "bottom_to_top") == 0) ? 1 : 0);
+
+                g_event_callback(i, "Tripwire", json_message);
             }
         }
     }
 }
 
-// Function to detect area invasion events
 void detect_area_invasion_events() {
     for (int i = 0; i < ROCKIVA_BA_MAX_RULE_NUM; i++) {
-        if (g_task_rule.areaInvasionRules[i].ruleEnable) {
-            // Simulate event detection (replace with actual detection logic)
-            bool eventTriggered = (rand() % 15 == 0); // Randomly trigger events for testing
-            if (eventTriggered && g_event_callback) {
-                char details[128];
-                snprintf(details, sizeof(details), "Area Invasion %d triggered at points: (%d, %d), (%d, %d), (%d, %d), (%d, %d)",
+        if (!g_task_rule.areaInvasionRules[i].ruleEnable)
+            continue;
+
+        RockIvaArea* area = &g_task_rule.areaInvasionRules[i].area;
+
+        int x_min = area->points[0].x;
+        int y_min = area->points[0].y;
+        int x_max = area->points[2].x;
+        int y_max = area->points[2].y;
+
+        for (int j = 0; j < tracked_object_count; j++) {
+            TrackedObject obj = tracked_objects[j];
+
+            if (obj.curr_cx >= x_min && obj.curr_cx <= x_max &&
+                obj.curr_cy >= y_min && obj.curr_cy <= y_max && g_event_callback) {
+
+                char json_message[512];
+                snprintf(json_message, sizeof(json_message),
+                         "{\n"
+                         "  \"timestamp\": \"%s\",\n"
+                         "  \"camera_id\": \"CAMERA_001\",\n"
+                         "  \"client_id\": \"CLIENT_ABC\",\n"
+                         "  \"event_type\": \"area_invasion_event\",\n"
+                         "  \"sequence_number\": %d,\n"
+                         "  \"area_invasion_event\": {\n"
+                         "    \"area_id\": %d,\n"
+                         "    \"points\": [\n"
+                         "      {\"x\": %d, \"y\": %d},\n"
+                         "      {\"x\": %d, \"y\": %d},\n"
+                         "      {\"x\": %d, \"y\": %d},\n"
+                         "      {\"x\": %d, \"y\": %d}\n"
+                         "    ]\n"
+                         "  }\n"
+                         "}\n",
+                         saix_get_current_timestamp(),
                          i,
-                         g_task_rule.areaInvasionRules[i].area.points[0].x,
-                         g_task_rule.areaInvasionRules[i].area.points[0].y,
-                         g_task_rule.areaInvasionRules[i].area.points[1].x,
-                         g_task_rule.areaInvasionRules[i].area.points[1].y,
-                         g_task_rule.areaInvasionRules[i].area.points[2].x,
-                         g_task_rule.areaInvasionRules[i].area.points[2].y,
-                         g_task_rule.areaInvasionRules[i].area.points[3].x,
-                         g_task_rule.areaInvasionRules[i].area.points[3].y);
-                g_event_callback(i, "Area Invasion", details);
+                         i,
+                         area->points[0].x, area->points[0].y,
+                         area->points[1].x, area->points[1].y,
+                         area->points[2].x, area->points[2].y,
+                         area->points[3].x, area->points[3].y);
+
+                g_event_callback(i, "Area Invasion", json_message);
             }
         }
     }
 }
+
 
 void process_events() {
     while (true) {
