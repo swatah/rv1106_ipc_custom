@@ -32,6 +32,14 @@ aux_source_directory(${PROJECT_SOURCE_DIR}/common/rockiva SRCS)
 aux_source_directory(${PROJECT_SOURCE_DIR}/common/event SRCS)
 aux_source_directory(${PROJECT_SOURCE_DIR}/common/region_clip SRCS)
 
+# Include directories
+include_directories(
+    ${CMAKE_CURRENT_SOURCE_DIR}/third_party/mqtt/include # Path to MQTT library headers
+)
+
+# Library search path
+link_directories(${CMAKE_CURRENT_SOURCE_DIR}/third_party/mqtt/libs)
+
 include_directories(video
 					server
 					${PROJECT_SOURCE_DIR}/common
@@ -63,8 +71,16 @@ add_definitions(-DISP_HW_V32)
 # link_libraries(asan)
 
 add_executable(${PROJECT_NAME} ${SRCS})
-target_link_libraries(${PROJECT_NAME} pthread rockit rockchip_mpp rkaiq rtsp rkaudio_detect aec_bf_process wpa_client m rkmuxer freetype rockiva iconv rknnmrt rga stdc++ rksysutils rkaudio)
+target_link_libraries(${PROJECT_NAME} pthread rockit 
+	rockchip_mpp rkaiq rtsp rkaudio_detect aec_bf_process 
+	wpa_client m rkmuxer freetype rockiva iconv rknnmrt 
+	rga stdc++ rksysutils rkaudio paho-mqtt3c
+)
 
+#Embed runtime library path so executable can find .so files
+set_target_properties(${PROJECT_NAME} PROPERTIES
+    INSTALL_RPATH "${CMAKE_CURRENT_SOURCE_DIR}/third_party/mqtt/libs"
+)
 install(TARGETS ${PROJECT_NAME} RUNTIME DESTINATION bin)
 install(FILES rkipc-300w.ini DESTINATION share)
 install(FILES rkipc-400w.ini DESTINATION share)
