@@ -318,7 +318,12 @@ static void *rkipc_get_nn_update_osd(void *arg) {
 			video_height = rk_param_get_int("video.0:height", -1);
 		}
 		ret = rkipc_rknn_object_get(&ba_result);
-		LOG_DEBUG("ret is %d, ba_result.objNum is %d\n", ret, ba_result.objNum);
+LOG_DEBUG("ret is %d, ba_result.objNum is %d\n", ret, ba_result.objNum);
+
+		// Forward detection result to Tripwire before drawing
+		if (ret == 0 && ba_result.objNum > 0) {
+		tripwire_process_frame(&ba_result);
+		}
 
 		if ((ret == -1) && (rkipc_get_curren_time_ms() - last_ba_result_time > 300))
 			ba_result.objNum = 0;

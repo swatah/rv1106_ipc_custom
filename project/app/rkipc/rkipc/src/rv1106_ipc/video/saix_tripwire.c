@@ -13,7 +13,7 @@
 #include "video.h"
 #include "rockiva_ba_api.h"
 
-
+pthread_mutex_t tripwire_lock = PTHREAD_MUTEX_INITIALIZER;
 
 // Event callback typedef
 typedef void (*SaixEventCallback)(int rule_id, const char* event_type, const char* json_payload);
@@ -209,7 +209,6 @@ void ba_result_callback(const RockIvaBaResult* result, const RockIvaExecuteStatu
                          client_id,
                          firstTrigger->ruleID,
                          direction,  // Use the properly mapped direction
-                         get_object_type_string(obj->objInfo.type),
                          obj->objInfo.objId);
 
                 g_saix_event_callback(firstTrigger->ruleID, "Tripwire", json_message);
@@ -239,8 +238,7 @@ void ba_result_callback(const RockIvaBaResult* result, const RockIvaExecuteStatu
                          camera_id,
                          client_id,
                          firstTrigger->ruleID,
-                         firstTrigger->ruleID,
-                         get_object_type_string(obj->objInfo.type),
+                         firstTrigger->ruleID,  
                          obj->objInfo.objId);
 
                 g_saix_event_callback(firstTrigger->ruleID, "Area Invasion", json_message);
@@ -296,23 +294,40 @@ int init_tripwire(void) {
 }
 
 // Deinitialization function
-// Fixed deinit_tripwire function
 int deinit_tripwire(void) {
     printf("[Tripwire] Deinitializing Tripwire functionality...\n");
 
     extern RockIvaHandle rkba_handle;
-    
+
     // Nullify event callback first to prevent triggering during shutdown
     g_saix_event_callback = NULL;
-    
+
     // Release the behavior analysis handle
     RockIvaRetCode ret = ROCKIVA_BA_Release(rkba_handle);
     if (ret != ROCKIVA_RET_SUCCESS) {
-        printf("[Tripwire] Failed to release RockIva BA: %d\n", ret);
+        printf("[Tripwire] Failed to release BA handle: %d\n", ret);
         return -1;
     }
-    
+
+    // Optionally reset rkba_handle to NULL if it is a pointer type
+    // rkba_handle = NULL;
+
     printf("[Tripwire] Deinitialization complete.\n");
     return 0;
 }
+
+int tripwire_process_frame(RockIvaBaResult *result) {
+    if (!result || result->objNum == 0) {
+        return -1;
+    }
+
+    pthread_mutex_lock(&tripwire_lock);
+    ba_result_callback(result, ROCKIVA_SUCCESS, NULL);
+    pthread_mutex_unlock(&tripwire_lock);
+
+    return 0;
+}
+
+
+
 

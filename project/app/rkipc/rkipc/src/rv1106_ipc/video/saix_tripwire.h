@@ -19,6 +19,9 @@
 extern "C" {
 #endif
 
+extern pthread_mutex_t tripwire_lock;
+
+
 // Event callback typedef
 typedef void (*SaixEventCallback)(int rule_id, const char* event_type, const char* json_payload);
 
@@ -39,6 +42,8 @@ int update_tripwire_config(void);
 
 // De-initialize tripwire functionality
 int deinit_tripwire(void);
+
+int tripwire_process_frame(RockIvaBaResult *result);
 
 #ifdef __cplusplus
 }

@@ -14,7 +14,7 @@ include_directories(${PROJECT_SOURCE_DIR}/./include
                     ${WPA_SUPPLICANT_INCLUDE_DIRS}
                     # Add RockIva include paths
                     ${PROJECT_SOURCE_DIR}/media/iva/iva/librockiva/rockiva-rv1106-Linux/include
-                    /home/luckfox/Downloads/rv1106_ipc_custom/media/iva/iva/librockiva/rockiva-rv1106-Linux/include
+                    /var/home/amardeep/swatah/rv1106_ipc_custom/media/iva/iva/librockiva/rockiva-rv1106-Linux/include
                     )
 
 aux_source_directory(./ SRCS)
@@ -58,8 +58,9 @@ include_directories(video
 
 # Add RockIva library directory
 link_directories(${PROJECT_SOURCE_DIR}/lib/arm-rockchip830-linux-uclibcgnueabihf
-                 ${PROJECT_SOURCE_DIR}/media/iva/iva/librockiva/rockiva-rv1106-Linux/lib
-                 /home/luckfox/Downloads/rv1106_ipc_custom/media/iva/iva/librockiva/rockiva-rv1106-Linux/lib
+                ${PROJECT_SOURCE_DIR}/media/iva/iva/librockiva/rockiva-rv1106-Linux/lib
+                 /var/home/amardeep/swatah/rv1106_ipc_custom/media/iva/iva/librockiva/rockiva-rv1106-Linux/lib
+                 /var/home/amardeep/swatah/rv1106_ipc_custom/media/iva/iva/librockiva/rockiva-rv1106-Linux/lib
                  )
 
 add_definitions(-DISP_HW_V32)
