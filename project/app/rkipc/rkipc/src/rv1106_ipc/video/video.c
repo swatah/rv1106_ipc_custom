@@ -289,6 +289,7 @@ RK_S32 draw_rect_2bpp(RK_U8 *buffer, RK_U32 width, RK_U32 height, int rgn_x, int
 }
 
 static void *rkipc_get_nn_update_osd(void *arg) {
+	printf("Thread running\n");
 	g_nn_osd_run_ = 1;
 	LOG_DEBUG("#Start %s thread, arg:%p\n", __func__, arg);
 	prctl(PR_SET_NAME, "RkipcNpuOsd", 0, 0, 0);
@@ -318,10 +319,11 @@ static void *rkipc_get_nn_update_osd(void *arg) {
 			video_height = rk_param_get_int("video.0:height", -1);
 		}
 		ret = rkipc_rknn_object_get(&ba_result);
+		printf("ret=%d, objNum=%d\n", ret, ba_result.objNum);
 LOG_DEBUG("ret is %d, ba_result.objNum is %d\n", ret, ba_result.objNum);
 
 		// Forward detection result to Tripwire before drawing
-		if (ret == 0 && ba_result.objNum > 0) {
+		 if (ret == 0 && ba_result.objNum > 0) {
 		tripwire_process_frame(&ba_result);
 		}
 
@@ -403,6 +405,9 @@ LOG_DEBUG("ret is %d, ba_result.objNum is %d\n", ret, ba_result.objNum);
 			 			object->firstTrigger.triggerType);
 #endif
 		}
+		// if (ret == 0 && ba_result.objNum > 0) {
+		//  tripwire_process_frame(&ba_result);
+		//  }
 		ret = RK_MPI_RGN_UpdateCanvas(RgnHandle);
 		if (ret != RK_SUCCESS) {
 			RK_LOGE("RK_MPI_RGN_UpdateCanvas failed with %#x!", ret);
@@ -1794,8 +1799,8 @@ int rk_video_init() {
 	// rk_region_clip_set_all();
 	if (enable_npu || enable_ivs) {
 		ret |= saix_setup_ivs_pipe();
-		 ret |= start_tripwire_thread();
-		saix_register_event_callback(ba_result_callback);
+		ret |= init_tripwire();
+		//saix_register_event_callback(ba_result_callback);
 	}
 	// The osd dma buffer must be placed in the last application,
 	// otherwise, when the font size is switched, holes may be caused
@@ -1807,38 +1812,48 @@ int rk_video_init() {
 }
 
 int rk_video_deinit() {
-	LOG_DEBUG("%s\n", __func__);
-	g_video_run_ = 0;
-	int ret = 0;
-	if (enable_npu || enable_ivs)
-	    ret |= stop_tripwire_thread();
-		ret |= saix_teardown_ivs_pipe();
-	// rk_region_clip_set_callback_register(NULL);
-	rk_roi_set_callback_register(NULL);
-	if (enable_osd)
-		ret |= rkipc_osd_deinit();
-	// if (g_enable_vo)
-	// 	ret |= rkipc_pipe_vi_vo_deinit();
-	if (enable_venc_0) {
-		pthread_join(saix_thread_venc0_handle, NULL);
-		ret |= saix_teardown_pipeline0();
-	}
-	if (enable_venc_1) {
-		pthread_join(venc_thread_1, NULL);
-		ret |= saix_teardown_pipe1();
-	}
-	if (enable_jpeg) {
-		ret |= saix_teardown_jpeg_pipe();
-	}
-	ret |= saix_vi_dev_deinit();
-	if (enable_rtmp)
-		ret |= saix_ipc_rtmp_deinit();
-	if (enable_rtsp)
-		ret |= rkipc_rtsp_deinit();
+    LOG_DEBUG("%s\n", __func__);
+    g_video_run_ = 0;
+    int ret = 0;
 
-	return ret;
+    // 1. Stop OSD/NN update thread BEFORE deinit_tripwire
+    if (g_nn_osd_run_) {
+        g_nn_osd_run_ = 0;
+        pthread_join(get_nn_update_osd_thread_id, NULL);
+    }
+
+    // 2. Stop IVS/BA threads BEFORE deinit_tripwire
+    if (enable_npu || enable_ivs) {
+        // If you have IVS threads, join them here
+        pthread_join(get_ivs_result_thread, NULL);
+        // Now it is safe to deinit tripwire
+        deinit_tripwire();
+        ret |= saix_teardown_ivs_pipe();
+    }
+
+    // ...rest of your cleanup...
+    rk_roi_set_callback_register(NULL);
+    if (enable_osd)
+        ret |= rkipc_osd_deinit();
+    if (enable_venc_0) {
+        pthread_join(saix_thread_venc0_handle, NULL);
+        ret |= saix_teardown_pipeline0();
+    }
+    if (enable_venc_1) {
+        pthread_join(venc_thread_1, NULL);
+        ret |= saix_teardown_pipe1();
+    }
+    if (enable_jpeg) {
+        ret |= saix_teardown_jpeg_pipe();
+    }
+    ret |= saix_vi_dev_deinit();
+    if (enable_rtmp)
+        ret |= saix_ipc_rtmp_deinit();
+    if (enable_rtsp)
+        ret |= rkipc_rtsp_deinit();
+
+    return ret;
 }
-
 extern char *rkipc_iq_file_path_;
 int rk_video_restart() {
 	int ret;
